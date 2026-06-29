@@ -29,7 +29,7 @@ const transfer = async (
             accountNumber: receiverAccountNumber
         }).session(session);
 
-        if (!receiverWallet) throw new Error("Receiver wallet not found");
+        if (!receiverWallet) throw new Error("Sending to other banks not allowed");
 
         if (senderWallet.accountNumber === receiverWallet.accountNumber) {
             throw new Error("Cannot transfer to self");
