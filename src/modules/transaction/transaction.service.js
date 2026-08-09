@@ -1,6 +1,9 @@
 const mongoose = require("mongoose");
+const axios = require("axios");
 const Wallet = require("../wallet/wallet.model");
 const Transaction = require("./transaction.model");
+const { signPayload } = require("../../utils/webhookSignature");
+const { REXXPAY_INFRA_WEBHOOK_URL } = require("../../config/env");
 
 const transfer = async (
     senderId,
@@ -11,6 +14,9 @@ const transfer = async (
 ) => {
 
     const session = await mongoose.startSession();
+
+    let receiverWalletForWebhook = null;
+    let webhookTransactionId = null;
 
     try {
         session.startTransaction();
@@ -67,6 +73,33 @@ const transfer = async (
         await session.commitTransaction();
         session.endSession();
 
+        // Remember these for the webhook, fired AFTER the DB transaction
+        // has safely committed - never fire a webhook for money that
+        // might still get rolled back.
+        receiverWalletForWebhook = receiverWallet;
+        webhookTransactionId = transaction[1]._id.toString();
+
+        // ================= NOTIFY REXXPAY INFRA ================= //
+        // If this transfer landed on a wallet flagged as belonging to
+        // Infra's account pool, tell Infra so it can mark the matching
+        // order/transaction as paid. This is fire-and-forget from the
+        // sender's point of view - their transfer already succeeded
+        // regardless of whether Infra is reachable right now.
+        if (receiverWalletForWebhook.linkedService === "rexxpay_infra") {
+            notifyInfra({
+                accountNumber: receiverWalletForWebhook.accountNumber,
+                // Infra/Elite Aura track amounts in kobo (minor units).
+                // RexxPay Bank wallet balances are in whole Naira, so we
+                // convert here. If that assumption is wrong for your
+                // setup, adjust this multiplier.
+                amountReceived: Math.round(amount * 100),
+                currency: "NGN",
+                bankReference: `rxpbank_${webhookTransactionId}`
+            }).catch((err) => {
+                console.error("[webhook] failed to notify RexxPay Infra:", err.message);
+            });
+        }
+
         return transaction;
 
     } catch (err) {
@@ -75,6 +108,18 @@ const transfer = async (
         throw err;
     }
 };
+
+async function notifyInfra(payload) {
+    const signature = signPayload(payload);
+
+    await axios.post(REXXPAY_INFRA_WEBHOOK_URL, payload, {
+        headers: {
+            "x-bank-signature": signature,
+            "Content-Type": "application/json"
+        },
+        timeout: 15000
+    });
+}
 
 // GET USER TRANSACTIONS
 const getUserTransactions = async (userId) => {
