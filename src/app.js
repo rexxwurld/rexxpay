@@ -18,10 +18,12 @@ app.use(cors({
 const authRoutes = require("./modules/auth/auth.routes");
 const walletRoutes = require("./modules/wallet/wallet.routes");
 const transactionRoutes = require("./modules/transaction/transaction.routes");
+const adminRoutes = require("./modules/admin/admin.routes");
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/transaction", transactionRoutes);
+app.use("/api/v1/admin", adminRoutes);
 
 
 app.use(express.static(path.join(__dirname, "public")));
