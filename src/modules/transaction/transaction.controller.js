@@ -22,19 +22,25 @@ const getHistory = async (req, res) => {
 // TRANSFER MONEY
 const transfer = async (req, res) => {
     try {
-        const { accountNumber, amount, description, bank } = req.body;
+        const { accountNumber, amount, description, bank, idempotencyKey } = req.body;
+
+        // Accept the idempotency key from a header too, matching how most
+        // real payment APIs do it (e.g. "Idempotency-Key").
+        const key = idempotencyKey || req.headers["idempotency-key"] || null;
 
         const result = await service.transfer(
             req.user.id,
             accountNumber,
             amount,
             description,
-            bank
+            bank,
+            key
         );
 
-        res.json({
-            message: "Transfer successful",
-            transaction: result
+        res.status(result.duplicate ? 200 : 201).json({
+            message: result.duplicate ? "Transfer already processed (idempotent replay)" : "Transfer successful",
+            duplicate: result.duplicate,
+            transaction: result.transactions
         });
 
     } catch (err) {

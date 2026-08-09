@@ -80,6 +80,27 @@ Rexxpay/
 - GET  /api/transaction
 - POST /api/transaction/transfer
 
+## What's been added beyond the original prototype
+
+- **`ledger` module** — double-entry `LedgerEntry` rows are posted alongside
+  every transfer's two `Wallet.balance` updates, inside the same DB
+  transaction. `balance` is now a cache; the ledger is the source of truth.
+- **Idempotency** — `POST /api/transaction/transfer` accepts an
+  `idempotencyKey` (body field or `Idempotency-Key` header). A retried
+  request with the same key returns the original result instead of
+  transferring twice. Enforced by a unique DB index, not just app logic.
+- **Transfer limits** — per-transaction and rolling 24h outbound limits
+  (`src/config/limits.js`), checked before any money moves.
+- **`audit` module** — logs, register/login/login-failure and every
+  completed or limit-blocked transfer to an append-only `AuditLog`
+  collection.
+
+## Still not real
+
+Same caveats as `rexxpay_infra`'s README: no real bank/NIBSS connection
+(this app *is* the mocked "real bank" that infra calls), no fraud/AML
+screening, no license. See that repo's README for the fuller list.
+
 ## Deployment
 
 Deployed on Render - https://rexxpay.onrender.com

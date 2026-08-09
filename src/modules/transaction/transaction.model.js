@@ -1,6 +1,14 @@
 const mongoose = require("mongoose");
 
 const transactionSchema = new mongoose.Schema({
+    // Client-supplied (or auto-generated) key so a retried "transfer"
+    // request - e.g. the user double-tapping "send" on a slow connection -
+    // can never create two real transfers. Sparse so old rows without one
+    // don't collide.
+    idempotencyKey: {
+        type: String,
+        default: null
+    },
     sender: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
@@ -36,5 +44,10 @@ const transactionSchema = new mongoose.Schema({
         default: "success"
     }
 }, { timestamps: true });
+
+transactionSchema.index(
+    { idempotencyKey: 1 },
+    { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } }
+);
 
 module.exports = mongoose.model("Transaction", transactionSchema);
