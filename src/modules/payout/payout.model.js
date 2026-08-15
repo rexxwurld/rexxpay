@@ -11,7 +11,13 @@ const payoutSchema = new mongoose.Schema(
         idempotencyKey: { type: String, required: true, unique: true },
 
         pool: { type: mongoose.Schema.Types.ObjectId, ref: "SettlementPool", required: true },
-        sourceWallet: { type: mongoose.Schema.Types.ObjectId, ref: "Wallet", required: true },
+
+        // Payouts drain the pool's aggregate balance directly, not any one
+        // customer's virtual account - there's no single wallet that "sent"
+        // the money, so this is informational only (which pool account we
+        // attributed the instruction to for reporting), never required and
+        // never debited.
+        sourceWallet: { type: mongoose.Schema.Types.ObjectId, ref: "Wallet", default: null },
 
         destinationAccountNumber: { type: String, required: true },
         destinationBank: { type: String, required: true },
