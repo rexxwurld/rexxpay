@@ -33,7 +33,7 @@ app.use("/api/v1/transaction", transactionRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/admin/deposits", depositRoutes);
 app.use("/api/v1/payouts", payoutRoutes);
-apiV1.use("/mock-bank", mockBankRoutes);
+app.use("/api/v1/mock-bank", mockBankRoutes);
 
 app.use(express.static(path.join(__dirname, "public")));
 
