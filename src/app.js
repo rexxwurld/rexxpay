@@ -15,10 +15,6 @@ app.use(cors({
 }));
 
 
-// Lightweight health check - used by an external uptime pinger (cron)
-// to keep this instance from going idle/asleep on Render's free tier.
-// No auth needed: it returns no sensitive data, just confirms the
-// process is up and responding.
 app.get("/health", (req, res) => {
     res.status(200).json({ status: true, message: "ok" });
 });
@@ -27,11 +23,15 @@ const authRoutes = require("./modules/auth/auth.routes");
 const walletRoutes = require("./modules/wallet/wallet.routes");
 const transactionRoutes = require("./modules/transaction/transaction.routes");
 const adminRoutes = require("./modules/admin/admin.routes");
+const depositRoutes = require("./modules/deposit/deposit.routes");
+const payoutRoutes = require("./modules/payout/payout.routes");
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/transaction", transactionRoutes);
 app.use("/api/v1/admin", adminRoutes);
+app.use("/api/v1/admin/deposits", depositRoutes);
+app.use("/api/v1/payouts", payoutRoutes);
 
 
 app.use(express.static(path.join(__dirname, "public")));
