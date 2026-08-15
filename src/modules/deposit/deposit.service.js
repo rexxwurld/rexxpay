@@ -37,6 +37,17 @@ async function processDeposit({ accountNumber, amount, reference, rawPayload = n
         if (!wallet) throw new Error("destination_wallet_not_found");
         if (!wallet.pool) throw new Error("wallet_not_linked_to_a_settlement_pool");
 
+        // Pool wallets (linkedService: "swiftpay") only accept deposits
+        // while "assigned" - i.e. SwiftPay currently has this account
+        // handed out to a customer for an active checkout. If SwiftPay
+        // already released it back to "available" (payment done, or the
+        // checkout was abandoned/swept), a deposit landing on it now is
+        // not tied to any known customer/order - reject rather than
+        // silently crediting the pool for an unrecognized payment.
+        if (wallet.linkedService === "swiftpay" && wallet.status !== "assigned") {
+            throw new Error("wallet_not_currently_assigned");
+        }
+
         wallet.balance += amount;
         await wallet.save({ session });
 
