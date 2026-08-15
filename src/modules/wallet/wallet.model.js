@@ -33,14 +33,19 @@ const walletSchema = new mongoose.Schema({
     },
 
     // Only meaningful for linkedService: "swiftpay" pool wallets.
-    // available: free for SwiftPay to hand out to a customer.
-    // assigned:  currently in use for an active checkout on SwiftPay's side.
+    // available:   free for SwiftPay to hand out to a customer.
+    // assigned:    currently in use for an active checkout on SwiftPay's side.
+    // deactivated: checkout finished (or was abandoned), account is in
+    //              SwiftPay's cooldown - not in active use, but also not
+    //              back in the pool yet, so a deposit landing here now is
+    //              still unrecognized and gets rejected the same as if it
+    //              were "assigned" (see deposit.service.js).
     // SwiftPay is the source of truth for WHEN this flips (it owns the
     // checkout lifecycle) - this field just mirrors that so the bank's
     // own records/dashboard agree with SwiftPay's pool state.
     status: {
         type: String,
-        enum: ["available", "assigned"],
+        enum: ["available", "assigned", "deactivated"],
         default: "available"
     },
 
