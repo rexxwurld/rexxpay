@@ -39,6 +39,30 @@ async function postTransferEntries({ entryGroup, amount, senderWalletId, receive
     );
 }
 
+/**
+ * Deposits and payouts only touch one Wallet (the counterparty is the
+ * SettlementPool, not another wallet), so unlike postTransferEntries this
+ * posts a single leg. Caller is responsible for posting the matching
+ * PoolLedgerEntry in the same session - see poolLedger.service.js.
+ */
+async function postSingleEntry({ wallet, direction, amount, sourceType, sourceRef, description, session }) {
+    if (!Number.isInteger(amount) || amount <= 0) {
+        throw new Error("ledger_invalid_amount");
+    }
+    if (!session) {
+        throw new Error("ledger_requires_session");
+    }
+    if (!["deposit", "payout"].includes(sourceType)) {
+        throw new Error("ledger_use_postTransferEntries_for_transfers");
+    }
+
+    const [entry] = await LedgerEntry.create(
+        [{ wallet, direction, amount, sourceType, sourceRef, description }],
+        { session, ordered: true }
+    );
+    return entry;
+}
+
 async function computeBalance(walletId) {
     const [result] = await LedgerEntry.aggregate([
         { $match: { wallet: walletId } },
@@ -54,4 +78,4 @@ async function computeBalance(walletId) {
     return result.credits - result.debits;
 }
 
-module.exports = { postTransferEntries, computeBalance };
+module.exports = { postTransferEntries, postSingleEntry, computeBalance };
