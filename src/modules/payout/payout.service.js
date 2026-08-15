@@ -6,9 +6,8 @@
 // outbound-transfer provider.
 
 const mongoose = require("mongoose");
-const Wallet = require("../wallet/wallet.model");
 const Payout = require("./payout.model");
-const { postSingleEntry } = require("../ledger/ledger.service");
+const SettlementPool = require("../settlement/settlementPool.model");
 const { postPoolEntry } = require("../ledger/poolLedger.service");
 const { getPoolByService, debitPool, creditPool } = require("../settlement/settlementPool.service");
 const auditLog = require("../audit/auditLog.service");
@@ -33,17 +32,19 @@ async function processPayout({
     const pool = await getPoolByService(linkedService);
     if (!pool) throw new Error("settlement_pool_not_found");
 
-    const poolWallet = await Wallet.findOne({ pool: pool._id, linkedService });
-    if (!poolWallet) throw new Error("pool_wallet_not_found");
-
     const session = await mongoose.startSession();
     let payout;
 
     try {
         session.startTransaction();
 
-        const freshWallet = await Wallet.findById(poolWallet._id).session(session);
-        if (freshWallet.balance < amount) {
+        // Payouts draw against the POOL's aggregate balance - the real
+        // money backing every virtual account together - not any single
+        // customer's account. Checking one wallet's balance here was the
+        // bug: money can be sitting fine in the pool via other virtual
+        // accounts while one arbitrary wallet sits empty.
+        const freshPool = await SettlementPool.findById(pool._id).session(session);
+        if (freshPool.poolBalance < amount) {
             throw new Error("insufficient_pool_funds");
         }
 
@@ -51,7 +52,6 @@ async function processPayout({
             [{
                 idempotencyKey,
                 pool: pool._id,
-                sourceWallet: freshWallet._id,
                 destinationAccountNumber,
                 destinationBank,
                 destinationAccountName,
@@ -60,19 +60,6 @@ async function processPayout({
             }],
             { session, ordered: true }
         );
-
-        freshWallet.balance -= amount;
-        await freshWallet.save({ session });
-
-        await postSingleEntry({
-            wallet: freshWallet._id,
-            direction: "debit",
-            amount,
-            sourceType: "payout",
-            sourceRef: payout._id.toString(),
-            description: `Payout to ${destinationAccountNumber}`,
-            session
-        });
 
         await postPoolEntry({
             pool: pool._id,
@@ -132,20 +119,6 @@ async function reversePayout(payout, reason) {
     const session = await mongoose.startSession();
     try {
         session.startTransaction();
-
-        const wallet = await Wallet.findById(payout.sourceWallet).session(session);
-        wallet.balance += payout.amount;
-        await wallet.save({ session });
-
-        await postSingleEntry({
-            wallet: wallet._id,
-            direction: "credit",
-            amount: payout.amount,
-            sourceType: "payout",
-            sourceRef: `${payout._id.toString()}_reversal`,
-            description: `Payout reversal: ${reason}`,
-            session
-        });
 
         await postPoolEntry({
             pool: payout.pool,
