@@ -1,15 +1,12 @@
-const crypto = require("crypto");
-const User = require("../auth/user.model");
 const Wallet = require("../wallet/wallet.model");
 const generateAccountNumber = require("../../utils/generateAccountNumber");
-const { hashPassword } = require("../../utils/hash");
 const { getPoolByService, createPool } = require("../settlement/settlementPool.service");
 
-// Creates a real wallet (with a real, unique account number) owned by a
-// throwaway "system" user, linked to SwiftPay's SettlementPool so incoming
-// transfers/deposits to it are recognized as belonging to the pool rather
-// than a normal end-user account. Nobody logs into this user - it exists
-// only to satisfy Wallet's required userId reference.
+// Creates a real virtual account (a Wallet row with a real, unique account
+// number), linked to SwiftPay's SettlementPool so incoming deposits are
+// recognized as belonging to the pool rather than a normal end-user
+// account. No User is created or needed - userId stays null since this
+// account isn't owned by any real person.
 //
 // Idempotent on the pool itself: if a SwiftPay pool already exists, this
 // wallet links to it instead of creating a second, disconnected pool.
@@ -19,22 +16,9 @@ async function createPoolWallet(label) {
         pool = await createPool({ label: label || "SwiftPay Settlement Pool", linkedService: "swiftpay" });
     }
 
-    const randomSuffix = crypto.randomBytes(4).toString("hex");
-    const email = `pool_${randomSuffix}@rexxpay.swiftpay.internal`;
-    const randomPassword = crypto.randomBytes(16).toString("hex");
-    const hashed = await hashPassword(randomPassword);
-
-    const user = await User.create({
-        fullname: label || "SwiftPay Pool Account",
-        email,
-        phone: "",
-        password: hashed
-    });
-
     const accountNumber = await generateAccountNumber();
 
     const wallet = await Wallet.create({
-        userId: user._id,
         accountNumber,
         balance: 0,
         linkedService: "swiftpay",
@@ -44,7 +28,6 @@ async function createPoolWallet(label) {
     return {
         accountNumber: wallet.accountNumber,
         walletId: wallet._id,
-        userId: user._id,
         poolId: pool._id
     };
 }
@@ -64,4 +47,20 @@ async function getPoolStatus() {
     };
 }
 
-module.exports = { createPoolWallet, getPoolStatus };
+// Called by SwiftPay once a virtual account's payment is done (or the
+// checkout it was holding is abandoned/stale) and it's handing the
+// account back to its own available pool. This just flips our side's
+// status flag to match, for audit/dashboard purposes - it does NOT
+// touch balance or the pool; the wallet's accumulated balance stays put
+// and keeps counting toward the settlement pool regardless of status.
+async function releasePoolAccount(accountNumber) {
+    const wallet = await Wallet.findOne({ accountNumber, linkedService: "swiftpay" });
+    if (!wallet) throw new Error("pool_account_not_found");
+
+    wallet.status = "available";
+    await wallet.save();
+
+    return { accountNumber: wallet.accountNumber, status: wallet.status };
+}
+
+module.exports = { createPoolWallet, getPoolStatus, releasePoolAccount };
