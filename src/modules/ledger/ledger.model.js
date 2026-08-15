@@ -16,7 +16,7 @@ const ledgerEntrySchema = new mongoose.Schema(
         direction: { type: String, enum: ["debit", "credit"], required: true },
         amount: { type: Number, required: true }, // always positive
 
-        sourceType: { type: String, enum: ["transfer", "adjustment", "reversal"], required: true },
+        sourceType: { type: String, enum: ["transfer", "adjustment", "reversal", "deposit", "payout"], required: true },
         sourceRef: { type: String, required: true }, // Transaction._id
 
         description: { type: String }
