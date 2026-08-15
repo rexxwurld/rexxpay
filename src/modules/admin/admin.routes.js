@@ -11,4 +11,15 @@ router.post("/pool-accounts", requireAdminKey, controller.createPoolAccount);
 // Header: x-admin-key
 router.get("/pool-status", requireAdminKey, controller.getPoolStatus);
 
+// PATCH /api/v1/admin/pool-accounts/:accountNumber/assign
+// Called by SwiftPay right after handing this account to a customer.
+// Header: x-admin-key
+router.patch("/pool-accounts/:accountNumber/assign", requireAdminKey, controller.assignPoolAccount);
+
+// PATCH /api/v1/admin/pool-accounts/:accountNumber/release
+// Called by SwiftPay once the account is back in its own available pool
+// (payment completed + cooldown expired, or an abandoned/stale checkout).
+// Header: x-admin-key
+router.patch("/pool-accounts/:accountNumber/release", requireAdminKey, controller.releasePoolAccount);
+
 module.exports = router;
