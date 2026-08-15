@@ -42,8 +42,9 @@ async function postTransferEntries({ entryGroup, amount, senderWalletId, receive
 /**
  * Deposits and payouts only touch one Wallet (the counterparty is the
  * SettlementPool, not another wallet), so unlike postTransferEntries this
- * posts a single leg. Caller is responsible for posting the matching
- * PoolLedgerEntry in the same session - see poolLedger.service.js.
+ * posts a single leg. entryGroup is set to sourceRef since there's no
+ * second leg to pair with in this collection - the pairing "other side"
+ * lives in PoolLedgerEntry instead.
  */
 async function postSingleEntry({ wallet, direction, amount, sourceType, sourceRef, description, session }) {
     if (!Number.isInteger(amount) || amount <= 0) {
@@ -57,7 +58,7 @@ async function postSingleEntry({ wallet, direction, amount, sourceType, sourceRe
     }
 
     const [entry] = await LedgerEntry.create(
-        [{ wallet, direction, amount, sourceType, sourceRef, description }],
+        [{ entryGroup: sourceRef, wallet, direction, amount, sourceType, sourceRef, description }],
         { session, ordered: true }
     );
     return entry;
