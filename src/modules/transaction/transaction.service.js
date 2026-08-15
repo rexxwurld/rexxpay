@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const Wallet = require("../wallet/wallet.model");
 const Transaction = require("./transaction.model");
 const { signPayload } = require("../../utils/webhookSignature");
-const { REXXPAY_INFRA_WEBHOOK_URL } = require("../../config/env");
+const { SWIFTPAY_WEBHOOK_URL } = require("../../config/env");
 const { postTransferEntries } = require("../ledger/ledger.service");
 const auditLog = require("../audit/auditLog.service");
 const limits = require("../../config/limits");
@@ -20,9 +20,6 @@ const transfer = async (
 
     amount = Number(amount);
 
-    // Idempotency: if the client already sent this exact request (retry
-    // after a timeout, double-tap on "send") and we have a matching key on
-    // record, return the original result instead of transferring again.
     if (idempotencyKey) {
         const existing = await Transaction.findOne({ idempotencyKey, sender: senderId, type: "debit" });
         if (existing) return { duplicate: true, transactions: [existing] };
@@ -111,8 +108,6 @@ const transfer = async (
             }
         ], { session, ordered: true });
 
-        // Ledger: the source of truth behind the two Wallet.balance writes
-        // above - lets any balance be independently rebuilt from history.
         await postTransferEntries({
             entryGroup: `txn_${transaction[0]._id}`,
             amount,
@@ -125,9 +120,6 @@ const transfer = async (
         await session.commitTransaction();
         session.endSession();
 
-        // Remember these for the webhook, fired AFTER the DB transaction
-        // has safely committed - never fire a webhook for money that
-        // might still get rolled back.
         receiverWalletForWebhook = receiverWallet;
         webhookTransactionId = transaction[1]._id.toString();
 
@@ -140,24 +132,20 @@ const transfer = async (
             metadata: { amount, receiverAccountNumber }
         });
 
-        // ================= NOTIFY REXXPAY INFRA ================= //
-        // If this transfer landed on a wallet flagged as belonging to
-        // Infra's account pool, tell Infra so it can mark the matching
-        // order/transaction as paid. This is fire-and-forget from the
-        // sender's point of view - their transfer already succeeded
-        // regardless of whether Infra is reachable right now.
-        if (receiverWalletForWebhook.linkedService === "rexxpay_infra") {
-            notifyInfra({
+        // ================= NOTIFY SWIFTPAY ================= //
+        // NOTE: this covers deposits that arrive as an internal
+        // wallet-to-wallet transfer. Deposits arriving from an external
+        // bank now go through deposit.service.js -> processDeposit
+        // instead, which also updates the SettlementPool balance (this
+        // path doesn't).
+        if (receiverWalletForWebhook.linkedService === "swiftpay") {
+            notifySwiftPay({
                 accountNumber: receiverWalletForWebhook.accountNumber,
-                // Infra/Elite Aura track amounts in kobo (minor units).
-                // RexxPay Bank wallet balances are in whole Naira, so we
-                // convert here. If that assumption is wrong for your
-                // setup, adjust this multiplier.
                 amountReceived: Math.round(amount * 100),
                 currency: "NGN",
                 bankReference: `rxpbank_${webhookTransactionId}`
             }).catch((err) => {
-                console.error("[webhook] failed to notify RexxPay Infra:", err.message);
+                console.error("[webhook] failed to notify SwiftPay:", err.message);
             });
         }
 
@@ -167,8 +155,6 @@ const transfer = async (
         await session.abortTransaction();
         session.endSession();
 
-        // A concurrent retry with the same idempotency key can race past
-        // the findOne check above - the unique index is the real guarantee.
         if (err.code === 11000 && idempotencyKey) {
             const existingRace = await Transaction.findOne({ idempotencyKey, sender: senderId, type: "debit" });
             if (existingRace) return { duplicate: true, transactions: [existingRace] };
@@ -177,10 +163,10 @@ const transfer = async (
     }
 };
 
-async function notifyInfra(payload) {
+async function notifySwiftPay(payload) {
     const signature = signPayload(payload);
 
-    await axios.post(REXXPAY_INFRA_WEBHOOK_URL, payload, {
+    await axios.post(SWIFTPAY_WEBHOOK_URL, payload, {
         headers: {
             "x-bank-signature": signature,
             "Content-Type": "application/json"
@@ -189,13 +175,12 @@ async function notifyInfra(payload) {
     });
 }
 
-// GET USER TRANSACTIONS
 const getUserTransactions = async (userId) => {
 
     const transactions = await Transaction.find({
         $or: [
-            { sender: userId, type: "debit" },   // ← sender only sees debit
-            { receiver: userId, type: "credit" }  // ← receiver only sees credit
+            { sender: userId, type: "debit" },
+            { receiver: userId, type: "credit" }
         ]
     })
     .sort({ createdAt: -1 })
