@@ -49,6 +49,17 @@ async function processDeposit({ accountNumber, amount, reference, rawPayload = n
         }
 
         wallet.balance += amount;
+
+        // Close the account the moment payment lands, before the webhook
+        // even fires - otherwise there's a window between "deposit
+        // credited here" and "SwiftPay's webhook processing calls our
+        // deactivate endpoint" where a second real transfer to the same
+        // account number would still pass the assigned-only check above
+        // and get credited a second time.
+        if (wallet.linkedService === "swiftpay") {
+            wallet.status = "deactivated";
+        }
+
         await wallet.save({ session });
 
         [deposit] = await Deposit.create(
