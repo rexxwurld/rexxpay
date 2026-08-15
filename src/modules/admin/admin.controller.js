@@ -1,4 +1,4 @@
-const { createPoolWallet, getPoolStatus, assignPoolAccount, releasePoolAccount } = require("./admin.service");
+const { createPoolWallet, getPoolStatus, assignPoolAccount, deactivatePoolAccount, releasePoolAccount } = require("./admin.service");
 
 // Creates a real bank wallet for SwiftPay's account pool and returns
 // its real account number. Called by you (manually, or from SwiftPay's
@@ -17,12 +17,36 @@ exports.createPoolAccount = async (req, res) => {
     }
 };
 
+// GET /api/v1/admin/pool-status
+// Quick sanity check: pool balance vs sum of linked wallet balances.
+exports.getPoolStatus = async (req, res) => {
+    try {
+        const status = await getPoolStatus();
+        res.json({ status: true, data: status });
+    } catch (err) {
+        res.status(400).json({ status: false, message: err.message });
+    }
+};
+
 // PATCH /api/v1/admin/pool-accounts/:accountNumber/assign
 // Called by SwiftPay right after it hands this account out to a customer.
 exports.assignPoolAccount = async (req, res) => {
     try {
         const { accountNumber } = req.params;
         const result = await assignPoolAccount(accountNumber);
+        res.json({ status: true, data: result });
+    } catch (err) {
+        res.status(400).json({ status: false, message: err.message });
+    }
+};
+
+// PATCH /api/v1/admin/pool-accounts/:accountNumber/deactivate
+// Called by SwiftPay when a checkout on this account finishes and it
+// enters cooldown - not back in the pool yet, so deposits still reject.
+exports.deactivatePoolAccount = async (req, res) => {
+    try {
+        const { accountNumber } = req.params;
+        const result = await deactivatePoolAccount(accountNumber);
         res.json({ status: true, data: result });
     } catch (err) {
         res.status(400).json({ status: false, message: err.message });
