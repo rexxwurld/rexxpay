@@ -33,7 +33,11 @@ app.use("/api/v1/transaction", transactionRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/admin/deposits", depositRoutes);
 app.use("/api/v1/payouts", payoutRoutes);
-app.use("/api/v1/mock-bank", mockBankRoutes);
+// DEVELOPMENT/TESTING ONLY - simulates a bank transfer landing in RexxPay
+// while there's no real NIBSS connection. Never expose this in production.
+if (process.env.NODE_ENV !== "production") {
+    app.use("/api/v1/mock-bank", mockBankRoutes);
+}
 
 app.use(express.static(path.join(__dirname, "public")));
 
