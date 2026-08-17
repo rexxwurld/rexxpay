@@ -28,4 +28,10 @@ router.patch("/pool-accounts/:accountNumber/deactivate", requireAdminKey, contro
 // Header: x-admin-key
 router.patch("/pool-accounts/:accountNumber/release", requireAdminKey, controller.releasePoolAccount);
 
+// GET /api/v1/admin/settlement-export?from=&to=
+// Called by SwiftPay's reconcile job to pull confirmed deposits for a
+// date range, formatted to match SwiftPay's own bankReference values.
+// Header: x-admin-key
+router.get("/settlement-export", requireAdminKey, controller.getSettlementExport);
+
 module.exports = router;
