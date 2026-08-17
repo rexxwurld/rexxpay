@@ -93,4 +93,37 @@ async function releasePoolAccount(accountNumber) {
     return { accountNumber: wallet.accountNumber, status: wallet.status };
 }
 
-module.exports = { createPoolWallet, getPoolStatus, assignPoolAccount, deactivatePoolAccount, releasePoolAccount };
+// Called by SwiftPay's reconcile job to compare its own Transaction
+// records against what actually settled here. Returns one row per
+// confirmed deposit on a SwiftPay-linked pool wallet within the given
+// date range, shaped to match the bankReference SwiftPay already stores
+// (see deposit.service.js's notifySwiftPay: bankReference is always
+// `rxpbank_<deposit._id>`) so the two sides can be matched 1:1 without
+// SwiftPay needing to know anything about our internal Deposit schema.
+async function getSettlementExport({ from, to } = {}) {
+    const Deposit = require("../deposit/deposit.model");
+
+    const match = { status: "confirmed" };
+    if (from || to) {
+        match.createdAt = {};
+        if (from) match.createdAt.$gte = new Date(from);
+        if (to) match.createdAt.$lte = new Date(to);
+    }
+
+    const deposits = await Deposit.find(match)
+        .populate("wallet", "accountNumber linkedService")
+        .sort({ createdAt: 1 });
+
+    return deposits
+        .filter((d) => d.wallet && d.wallet.linkedService === "swiftpay")
+        .map((d) => ({
+            bankReference: `rxpbank_${d._id.toString()}`,
+            depositReference: d.reference,
+            accountNumber: d.wallet.accountNumber,
+            amount: d.amount,
+            currency: d.currency,
+            settledAt: d.createdAt
+        }));
+}
+
+module.exports = { createPoolWallet, getPoolStatus, assignPoolAccount, deactivatePoolAccount, releasePoolAccount, getSettlementExport };
