@@ -1,4 +1,4 @@
-const { createPoolWallet, getPoolStatus, assignPoolAccount, deactivatePoolAccount, releasePoolAccount } = require("./admin.service");
+const { createPoolWallet, getPoolStatus, assignPoolAccount, deactivatePoolAccount, releasePoolAccount, getSettlementExport } = require("./admin.service");
 
 // Creates a real bank wallet for SwiftPay's account pool and returns
 // its real account number. Called by you (manually, or from SwiftPay's
@@ -60,6 +60,21 @@ exports.releasePoolAccount = async (req, res) => {
         const { accountNumber } = req.params;
         const result = await releasePoolAccount(accountNumber);
         res.json({ status: true, data: result });
+    } catch (err) {
+        res.status(400).json({ status: false, message: err.message });
+    }
+};
+
+// GET /api/v1/admin/settlement-export?from=2026-08-16&to=2026-08-17
+// Called by SwiftPay's reconcile.js (via a small fetch wrapper) to pull
+// the day's confirmed deposits and compare against its own Transaction
+// records. from/to are optional ISO date strings; omitting both returns
+// every confirmed deposit ever recorded for SwiftPay's pool.
+exports.getSettlementExport = async (req, res) => {
+    try {
+        const { from, to } = req.query;
+        const rows = await getSettlementExport({ from, to });
+        res.json({ status: true, count: rows.length, data: rows });
     } catch (err) {
         res.status(400).json({ status: false, message: err.message });
     }
