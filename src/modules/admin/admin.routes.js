@@ -16,6 +16,12 @@ router.get("/pool-status", requireAdminKey, controller.getPoolStatus);
 // Header: x-admin-key
 router.patch("/pool-accounts/:accountNumber/assign", requireAdminKey, controller.assignPoolAccount);
 
+// PATCH /api/v1/admin/pool-accounts/:accountNumber/deactivate
+// Called by SwiftPay when a checkout on this account finishes and it
+// enters cooldown - not back in the pool yet, so deposits still reject.
+// Header: x-admin-key
+router.patch("/pool-accounts/:accountNumber/deactivate", requireAdminKey, controller.deactivatePoolAccount);
+
 // PATCH /api/v1/admin/pool-accounts/:accountNumber/release
 // Called by SwiftPay once the account is back in its own available pool
 // (payment completed + cooldown expired, or an abandoned/stale checkout).
