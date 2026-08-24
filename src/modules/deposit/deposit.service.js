@@ -51,8 +51,15 @@ async function processDeposit({ accountNumber, amount, reference, rawPayload = n
         // `amount` here is Naira, entered by a human or the bank rail -
         // convert before comparing, same conversion already used below
         // when notifying SwiftPay.
-        if (wallet.expectedAmount != null && Math.round(amount * 100) !== wallet.expectedAmount) {
-    throw new Error("amount_does_not_match_expected_amount");
+        if (
+  wallet.expectedAmount != null &&
+  Math.round(amount * 100) !== wallet.expectedAmount
+) {
+  const expectedAmountNaira = wallet.expectedAmount / 100;
+
+  throw new Error(
+    `Please send exactly ₦${expectedAmountNaira.toLocaleString()}`
+  );
         }
 
         wallet.balance += amount;
