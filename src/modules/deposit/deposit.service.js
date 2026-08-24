@@ -47,7 +47,11 @@ async function processDeposit({ accountNumber, amount, reference, rawPayload = n
         if (wallet.linkedService === "swiftpay" && wallet.status !== "assigned") {
             throw new Error("wallet_not_currently_assigned");
         }
-        if (wallet.expectedAmount != null && amount !== wallet.expectedAmount) {
+        // wallet.expectedAmount is stored in kobo (as SwiftPay sends it).
+        // `amount` here is Naira, entered by a human or the bank rail -
+        // convert before comparing, same conversion already used below
+        // when notifying SwiftPay.
+        if (wallet.expectedAmount != null && Math.round(amount * 100) !== wallet.expectedAmount) {
     throw new Error("amount_does_not_match_expected_amount");
         }
 
