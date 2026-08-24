@@ -33,7 +33,8 @@ exports.getPoolStatus = async (req, res) => {
 exports.assignPoolAccount = async (req, res) => {
     try {
         const { accountNumber } = req.params;
-        const result = await assignPoolAccount(accountNumber);
+        const { expectedAmount } = req.body;
+        const result = await assignPoolAccount(accountNumber, expectedAmount);
         res.json({ status: true, data: result });
     } catch (err) {
         res.status(400).json({ status: false, message: err.message });
