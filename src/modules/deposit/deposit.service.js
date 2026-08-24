@@ -19,7 +19,7 @@ const auditLog = require("../audit/auditLog.service");
 async function processDeposit({ accountNumber, amount, reference, rawPayload = null }) {
     amount = Number(amount);
 
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!Number.isInteger(amount) || amount <= 0) {
         throw new Error("invalid_deposit_amount");
     }
 
@@ -52,16 +52,18 @@ async function processDeposit({ accountNumber, amount, reference, rawPayload = n
         // convert before comparing, same conversion already used below
         // when notifying SwiftPay.
         if (
-  wallet.expectedAmount != null &&
-  Math.round(amount * 100) !== wallet.expectedAmount
+    wallet.expectedAmount != null &&
+    amount !== wallet.expectedAmount
 ) {
-  const expectedAmountNaira = wallet.expectedAmount / 100;
+    const expectedAmountNaira = wallet.expectedAmount / 100;
 
-  throw new Error(
-    `Please send exactly ₦${expectedAmountNaira.toLocaleString()}`
-  );
+    throw new Error(
+        `Please send exactly ₦${expectedAmountNaira.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        })}`
+    );
         }
-
         wallet.balance += amount;
 
         // Close the account the moment payment lands, before the webhook
@@ -130,7 +132,7 @@ async function processDeposit({ accountNumber, amount, reference, rawPayload = n
     if (walletForWebhook.linkedService === "swiftpay") {
         notifySwiftPay({
             accountNumber,
-            amountReceived: Math.round(amount * 100), // SwiftPay tracks kobo
+            amountReceived: amount , // SwiftPay tracks kobo
             currency: "NGN",
             bankReference: `rxpbank_${deposit._id.toString()}`,
             depositReference: reference
