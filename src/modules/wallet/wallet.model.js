@@ -16,6 +16,11 @@ const walletSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
+    expectedAmount: {
+    type: Number,
+    default: null
+},
+    
 
     balance: {
         type: Number,
