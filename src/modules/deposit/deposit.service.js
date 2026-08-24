@@ -47,6 +47,9 @@ async function processDeposit({ accountNumber, amount, reference, rawPayload = n
         if (wallet.linkedService === "swiftpay" && wallet.status !== "assigned") {
             throw new Error("wallet_not_currently_assigned");
         }
+        if (wallet.expectedAmount != null && amount !== wallet.expectedAmount) {
+    throw new Error("amount_does_not_match_expected_amount");
+        }
 
         wallet.balance += amount;
 
