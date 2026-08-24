@@ -14,21 +14,41 @@ async function getPoolByService(linkedService) {
 // activity. Positive amount only - direction decides add vs subtract.
 async function creditPool(poolId, amount, session) {
     if (!session) throw new Error("pool_requires_session");
+
+    amount = Number(amount);
+
+    if (!Number.isInteger(amount) || amount <= 0) {
+        throw new Error("pool_invalid_amount");
+    }
+
     const pool = await SettlementPool.findById(poolId).session(session);
     if (!pool) throw new Error("pool_not_found");
-    pool.poolBalance += Number(amount);
+
+    pool.poolBalance += amount;
+
     await pool.save({ session });
     return pool;
 }
 
 async function debitPool(poolId, amount, session) {
     if (!session) throw new Error("pool_requires_session");
+
+    amount = Number(amount);
+
+    if (!Number.isInteger(amount) || amount <= 0) {
+        throw new Error("pool_invalid_amount");
+    }
+
     const pool = await SettlementPool.findById(poolId).session(session);
+
     if (!pool) throw new Error("pool_not_found");
+
     if (pool.poolBalance < amount) {
         throw new Error("pool_insufficient_funds");
     }
-    pool.poolBalance -= Number(amount);
+
+    pool.poolBalance -= amount;
+
     await pool.save({ session });
     return pool;
 }
