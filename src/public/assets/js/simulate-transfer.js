@@ -16,8 +16,9 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const accountNumber = document.getElementById('accountNumber').value.trim();
+
   const amountNaira = Number(document.getElementById('amount').value);
-const amountKobo = Math.round(amountNaira * 100);
+  const amountKobo = Math.round(amountNaira * 100);
 
   statusBox.className = 'status';
   statusBox.textContent = '';
@@ -28,8 +29,8 @@ const amountKobo = Math.round(amountNaira * 100);
   }
 
   if (!Number.isFinite(amountNaira) || amountNaira <= 0) {
-  showError('Enter a valid amount.');
-  return;
+    showError('Enter a valid amount.');
+    return;
   }
 
   button.disabled = true;
@@ -40,12 +41,14 @@ const amountKobo = Math.round(amountNaira * 100);
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-  accountNumber,
-  amount: amountKobo,
-  currency: 'NGN'
-}),
+        accountNumber,
+        amount: amountKobo,
+        currency: 'NGN'
+      }),
+    });
 
     let data;
+
     try {
       data = await response.json();
     } catch {
@@ -53,17 +56,23 @@ const amountKobo = Math.round(amountNaira * 100);
     }
 
     if (!response.ok || !data.status) {
-      throw new Error(data.message || `Simulation failed (HTTP ${response.status}).`);
+      throw new Error(
+        data.message || `Simulation failed (HTTP ${response.status}).`
+      );
     }
 
     if (data.duplicate) {
-      showSuccess(`⚠️ Duplicate reference — original deposit already processed.\n\nDeposit ID: ${data.data._id}`);
+      showSuccess(
+        `⚠️ Duplicate reference — original deposit already processed.\n\n` +
+        `Deposit ID: ${data.data._id}`
+      );
     } else {
       showSuccess(
         `✅ Deposit processed.\n\n` +
-        `Amount: ₦${amount}\n` +
+        `Amount: ₦${amountNaira}\n` +
         `Deposit ID: ${data.data._id}\n\n` +
-        `If this wallet is SwiftPay-linked, a webhook was sent to SwiftPay — check its Transaction/WebhookEvent records to confirm it landed.`
+        `If this wallet is SwiftPay-linked, a webhook was sent to SwiftPay — ` +
+        `check its Transaction/WebhookEvent records to confirm it landed.`
       );
     }
 
