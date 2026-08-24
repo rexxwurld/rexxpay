@@ -16,7 +16,8 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const accountNumber = document.getElementById('accountNumber').value.trim();
-  const amount = Number(document.getElementById('amount').value);
+  const amountNaira = Number(document.getElementById('amount').value);
+const amountKobo = Math.round(amountNaira * 100);
 
   statusBox.className = 'status';
   statusBox.textContent = '';
@@ -26,9 +27,9 @@ form.addEventListener('submit', async (event) => {
     return;
   }
 
-  if (!Number.isFinite(amount) || amount <= 0) {
-    showError('Enter a valid amount.');
-    return;
+  if (!Number.isFinite(amountNaira) || amountNaira <= 0) {
+  showError('Enter a valid amount.');
+  return;
   }
 
   button.disabled = true;
@@ -38,8 +39,11 @@ form.addEventListener('submit', async (event) => {
     const response = await fetch('/api/v1/mock-bank/simulate-transfer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountNumber, amount, currency: 'NGN' }),
-    });
+      body: JSON.stringify({
+  accountNumber,
+  amount: amountKobo,
+  currency: 'NGN'
+}),
 
     let data;
     try {
