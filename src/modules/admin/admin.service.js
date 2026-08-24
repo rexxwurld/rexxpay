@@ -51,14 +51,15 @@ async function getPoolStatus() {
 // customer for a checkout. Flips our side's status flag to match, so
 // deposit.service.js's assigned-only check actually reflects reality
 // instead of every pool wallet sitting at "available" forever.
-async function assignPoolAccount(accountNumber) {
+async function assignPoolAccount(accountNumber, expectedAmount) {
     const wallet = await Wallet.findOne({ accountNumber, linkedService: "swiftpay" });
     if (!wallet) throw new Error("pool_account_not_found");
 
     wallet.status = "assigned";
+    wallet.expectedAmount = expectedAmount ?? null;
     await wallet.save();
 
-    return { accountNumber: wallet.accountNumber, status: wallet.status };
+    return { accountNumber: wallet.accountNumber, status: wallet.status, expectedAmount: wallet.expectedAmount };
 }
 
 // Called by SwiftPay right after a checkout on this account completes
