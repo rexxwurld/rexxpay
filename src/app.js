@@ -25,6 +25,7 @@ const transactionRoutes = require("./modules/transaction/transaction.routes");
 const adminRoutes = require("./modules/admin/admin.routes");
 const depositRoutes = require("./modules/deposit/deposit.routes");
 const payoutRoutes = require("./modules/payout/payout.routes");
+const refundRoutes = require("./modules/refund/refund.routes");
 const mockBankRoutes = require("./modules/bankPartner/mockBank.routes");
 
 app.use("/api/v1/auth", authRoutes);
@@ -33,6 +34,7 @@ app.use("/api/v1/transaction", transactionRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/admin/deposits", depositRoutes);
 app.use("/api/v1/payouts", payoutRoutes);
+app.use("/api/v1/refunds", refundRoutes);
 // DEVELOPMENT/TESTING ONLY - simulates a bank transfer landing in RexxPay
 // while there's no real NIBSS connection. Never expose this in production.
 if (process.env.NODE_ENV !== "production") {
