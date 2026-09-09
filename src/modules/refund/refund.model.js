@@ -16,6 +16,13 @@ const refundSchema = new mongoose.Schema(
       index: true,
     },
 
+    pool: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SettlementPool",
+      required: true,
+      index: true,
+    },
+
     merchant: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Merchant",

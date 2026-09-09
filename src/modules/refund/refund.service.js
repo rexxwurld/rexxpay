@@ -1,146 +1,162 @@
+// src/modules/refund/refund.service.js
+//
+// Bank-side refund instructions received from SwiftPay. A refund drains
+// the linked service's settlement pool, just like a payout, but the bank
+// outcome is asynchronous: acceptance here means "instruction queued",
+// not "customer received the money".
+
+const mongoose = require("mongoose");
 const crypto = require("crypto");
 const Refund = require("./refund.model");
+const SettlementPool = require("../settlement/settlementPool.model");
+const { postPoolEntry } = require("../ledger/poolLedger.service");
+const { getPoolByService, debitPool, creditPool } = require("../settlement/settlementPool.service");
+const auditLog = require("../audit/auditLog.service");
 
 function generateRefundReference() {
-  return `rf_${crypto.randomBytes(12).toString("hex")}`;
+    return `rf_${crypto.randomBytes(12).toString("hex")}`;
 }
 
-async function createRefund(data) {
-  const {
+async function processRefund({
     idempotencyKey,
     linkedService = "swiftpay",
     originalBankReference,
     destinationAccountNumber,
     destinationBank,
-    destinationAccountName,
+    destinationAccountName = "",
     amount,
-    currency = "NGN",
-    merchant,
-  } = data;
+    currency = "NGN"
+}) {
+    amount = Number(amount);
 
-  if (!idempotencyKey) {
-    throw new Error("idempotencyKey is required");
-  }
+    if (!idempotencyKey) throw new Error("idempotencyKey_required");
+    if (!originalBankReference) throw new Error("original_bank_reference_required");
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error("invalid_refund_amount");
+    if (!destinationAccountNumber || !destinationBank) throw new Error("destination_required");
 
-  if (!originalBankReference) {
-    throw new Error("originalBankReference is required");
-  }
+    const existing = await Refund.findOne({ idempotencyKey });
+    if (existing) return { duplicate: true, refund: existing };
 
-  if (!destinationAccountNumber) {
-    throw new Error("destinationAccountNumber is required");
-  }
+    const pool = await getPoolByService(linkedService);
+    if (!pool) throw new Error("settlement_pool_not_found");
 
-  if (!destinationBank) {
-    throw new Error("destinationBank is required");
-  }
+    const session = await mongoose.startSession();
+    let refund;
 
-  if (!amount || amount <= 0) {
-    throw new Error("amount must be greater than zero");
-  }
+    try {
+        session.startTransaction();
 
-  // Idempotency: never create the same refund twice.
-  const existingRefund = await Refund.findOne({ idempotencyKey });
+        const freshPool = await SettlementPool.findById(pool._id).session(session);
+        if (!freshPool) throw new Error("settlement_pool_not_found");
+        if (freshPool.poolBalance < amount) throw new Error("insufficient_pool_funds");
 
-  if (existingRefund) {
-    return existingRefund;
-  }
+        [refund] = await Refund.create([{
+            idempotencyKey,
+            reference: generateRefundReference(),
+            pool: pool._id,
+            linkedService,
+            originalBankReference,
+            destinationAccountNumber,
+            destinationBank,
+            destinationAccountName,
+            amount,
+            currency,
+            status: "pending"
+        }], { session, ordered: true });
 
-  const refund = await Refund.create({
-    idempotencyKey,
-    reference: generateRefundReference(),
-    merchant,
-    linkedService,
-    originalBankReference,
-    destinationAccountNumber,
-    destinationBank,
-    destinationAccountName,
-    amount,
-    currency,
-    status: "pending",
-  });
+        // Reserve the real bank-held funds in the settlement pool.
+        await postPoolEntry({
+            pool: pool._id,
+            direction: "debit",
+            amount,
+            sourceType: "refund",
+            sourceRef: refund._id.toString(),
+            description: `Refund to ${destinationAccountNumber}`,
+            session
+        });
+        await debitPool(pool._id, amount, session);
 
-  return refund;
+        await session.commitTransaction();
+        session.endSession();
+    } catch (err) {
+        await session.abortTransaction();
+        session.endSession();
+
+        if (err.code === 11000) {
+            const raced = await Refund.findOne({ idempotencyKey });
+            if (raced) return { duplicate: true, refund: raced };
+        }
+        throw err;
+    }
+
+    try {
+        // Replace this stub with the actual bank/provider submission.
+        // A successful return means only that the instruction was accepted.
+        const providerReference = await sendToDestinationBank(refund);
+
+        refund.status = "processing";
+        refund.providerRef = providerReference;
+        refund.failureReason = null;
+        await refund.save();
+
+        await auditLog.record({
+            actorType: "system",
+            actorRef: "refund_processor",
+            action: "refund.submitted",
+            entityType: "Refund",
+            entityRef: refund._id.toString(),
+            metadata: { providerReference, amount, destinationAccountNumber }
+        });
+    } catch (err) {
+        // The stub/provider explicitly failed before accepting the instruction,
+        // so the reserved pool funds can safely be returned. Network ambiguity
+        // must NOT be auto-reversed in a real provider integration.
+        await reverseRefund(refund, err.message);
+    }
+
+    return { duplicate: false, refund };
+}
+
+async function sendToDestinationBank(refund) {
+    return `stub_ref_${refund._id.toString()}`;
+}
+
+async function reverseRefund(refund, reason) {
+    const session = await mongoose.startSession();
+    try {
+        session.startTransaction();
+
+        await postPoolEntry({
+            pool: refund.pool,
+            direction: "credit",
+            amount: refund.amount,
+            sourceType: "reversal",
+            sourceRef: `${refund._id.toString()}_reversal`,
+            description: `Refund reversal: ${reason}`,
+            session
+        });
+
+        const poolId = refund.pool;
+        await creditPool(poolId, refund.amount, session);
+
+        refund.status = "failed";
+        refund.failureReason = reason;
+        refund.reversedAt = new Date();
+        await refund.save({ session });
+
+        await session.commitTransaction();
+        session.endSession();
+    } catch (err) {
+        await session.abortTransaction();
+        session.endSession();
+        throw err;
+    }
+
+    return refund;
 }
 
 async function getRefundByReference(reference) {
-  return Refund.findOne({ reference });
+    return Refund.findOne({ reference });
 }
 
-async function getRefundByIdempotencyKey(idempotencyKey) {
-  return Refund.findOne({ idempotencyKey });
-}
-
-async function processRefund(reference) {
-  const refund = await Refund.findOne({ reference });
-
-  if (!refund) {
-    throw new Error("Refund not found");
-  }
-
-  if (refund.status === "successful") {
-    return refund;
-  }
-
-  refund.status = "processing";
-  await refund.save();
-
-  return refund;
-}
-
-async function markRefundSuccessful(reference, providerRef = null) {
-  const refund = await Refund.findOne({ reference });
-
-  if (!refund) {
-    throw new Error("Refund not found");
-  }
-
-  refund.status = "successful";
-  refund.providerRef = providerRef;
-  refund.failureReason = null;
-  refund.processedAt = new Date();
-
-  await refund.save();
-
-  return refund;
-}
-
-async function markRefundFailed(reference, reason) {
-  const refund = await Refund.findOne({ reference });
-
-  if (!refund) {
-    throw new Error("Refund not found");
-  }
-
-  refund.status = "failed";
-  refund.failureReason = reason || "Refund failed";
-
-  await refund.save();
-
-  return refund;
-}
-
-async function markRefundReversed(reference, reason = null) {
-  const refund = await Refund.findOne({ reference });
-
-  if (!refund) {
-    throw new Error("Refund not found");
-  }
-
-  refund.status = "reversed";
-  refund.failureReason = reason;
-  refund.reversedAt = new Date();
-
-  await refund.save();
-
-  return refund;
-}
-
-module.exports = {
-  createRefund,
-  getRefundByReference,
-  getRefundByIdempotencyKey,
-  processRefund,
-  markRefundSuccessful,
-  markRefundFailed,
-  markRefundReversed,
-};
+module.exports = { processRefund, getRefundByReference };

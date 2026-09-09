@@ -1,76 +1,50 @@
-const refundService = require("./refund.service");
+const { processRefund, getRefundByReference } = require("./refund.service");
 
-async function createRefund(req, res) {
-  try {
-    const refund = await refundService.createRefund(req.body);
+// POST /api/v1/refunds
+// Called by SwiftPay after verifySwiftpaySignature middleware.
+exports.createRefund = async (req, res) => {
+    try {
+        const result = await processRefund(req.body);
 
-    return res.status(201).json({
-      status: true,
-      duplicate: false,
-      data: {
-        submissionRef: refund.reference,
-        rejectionReason: null,
-      },
-    });
-  } catch (error) {
-    console.error("Create refund error:", error);
+        return res.status(200).json({
+            status: true,
+            duplicate: result.duplicate,
+            data: {
+                submissionRef: result.refund.reference,
+                rejectionReason: null
+            }
+        });
+    } catch (err) {
+        console.error("Create refund error:", err);
 
-    // Idempotency duplicate
-    if (error.code === 11000) {
-      return res.status(200).json({
-        status: true,
-        duplicate: true,
-        data: {
-          submissionRef: null,
-          rejectionReason: null,
-        },
-      });
+        return res.status(400).json({
+            status: false,
+            duplicate: false,
+            data: {
+                submissionRef: null,
+                rejectionReason: err.message || "refund_rejected"
+            }
+        });
     }
+};
 
-    return res.status(400).json({
-      status: false,
-      duplicate: false,
-      data: {
-        submissionRef: null,
-        rejectionReason:
-          error.message || "Unable to create refund",
-      },
-    });
-  }
-}
+exports.getRefund = async (req, res) => {
+    try {
+        const refund = await getRefundByReference(req.params.reference);
 
-async function getRefund(req, res) {
-  try {
-    const { reference } = req.params;
+        if (!refund) {
+            return res.status(404).json({
+                status: false,
+                data: { rejectionReason: "refund_not_found" }
+            });
+        }
 
-    const refund = await refundService.getRefundByReference(reference);
-
-    if (!refund) {
-      return res.status(404).json({
-        status: false,
-        data: {
-          rejectionReason: "Refund not found",
-        },
-      });
+        return res.status(200).json({ status: true, data: refund });
+    } catch (err) {
+        console.error("Get refund error:", err);
+        return res.status(500).json({
+            status: false,
+            data: { rejectionReason: "unable_to_retrieve_refund" }
+        });
     }
-
-    return res.status(200).json({
-      status: true,
-      data: refund,
-    });
-  } catch (error) {
-    console.error("Get refund error:", error);
-
-    return res.status(500).json({
-      status: false,
-      data: {
-        rejectionReason: "Unable to retrieve refund",
-      },
-    });
-  }
-}
-
-module.exports = {
-  createRefund,
-  getRefund,
 };
