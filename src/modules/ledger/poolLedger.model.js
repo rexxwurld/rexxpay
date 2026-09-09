@@ -17,7 +17,7 @@ const poolLedgerEntrySchema = new mongoose.Schema(
 
         sourceType: {
             type: String,
-            enum: ["deposit", "payout", "settlement", "fee", "reversal", "adjustment"],
+            enum: ["deposit", "payout", "refund", "settlement", "fee", "reversal", "adjustment"],
             required: true
         },
         sourceRef: { type: String, required: true }, // Deposit._id, Payout._id, etc.
